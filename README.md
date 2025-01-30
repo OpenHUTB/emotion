@@ -31,9 +31,9 @@ git clone https://github.com/OpenHUTB/emotion.git
 conda install --file requirements.txt
 ```
 
-* Entering the [source code directory](https://github.com/OpenHUTB/emotion/tree/main/common) and run these python scripts:
+* Entering the [source code directory](https://github.com/OpenHUTB/emotion/tree/main/src) and run these python scripts:
 ```shell
-cd common
+cd src
 python BEL_music.py
 ```
 
