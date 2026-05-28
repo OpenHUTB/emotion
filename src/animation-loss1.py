@@ -64,11 +64,11 @@ def CORnet_Z():
 
     return model
 
-# 加载模型参数
+# Load model parameters
 with open('trained_model-animation_parameters.pkl', 'rb') as file:
     model_parameters = pickle.load(file)
 
-# 提取模型参数
+# Extract model parameters
 vi = model_parameters['vi']
 wi = model_parameters['wi']
 we = model_parameters['we']
@@ -79,38 +79,38 @@ eta = model_parameters['eta']
 eta_m = model_parameters['eta_m']
 rew = model_parameters['rew']
 
-# 从文件加载数据
+# Load data from file
 data = pd.read_excel('animation-test111.xlsx', engine='openpyxl')
 
-# 生成程序
+# EPP generation function
 def generate_EPP(features):
     x, y = features[0], features[1]
     max_s = max(x, y)
 
-    # 计算Ai和Oi
+    # Calculate Ai and Oi
     Ai = np.zeros((depth,))
     Oi = np.zeros((depth,))
     for j in range(depth):
         Ai[j] = x * vi[0, j]
         Oi[j] = y * wi[0, j]
 
-    # 计算E
+    # Calculate E value
     E = (np.sum(Ai) + max_s) - np.sum(Oi)
 
-    # 应用眶额皮层的抑制影响
+    # Apply inhibitory influence from orbitofrontal cortex
     E -= np.sum(we * Ai)
 
     return E
 
-# 遍历所有数据行，生成新的EPP值并归一化
+# Iterate all data rows, generate new EPP values and normalize
 generated_EPP_values = []
 real_EPP_values = []
 
-# 初始化最小和最大值
+# Initialize min and max values
 min_generated_EPP = np.inf
 max_generated_EPP = -np.inf
 
-# 计算欧氏距离
+# Calculate Euclidean distances
 euclidean_distances_array = []
 
 for index, row in data.iterrows():
@@ -122,42 +122,42 @@ for index, row in data.iterrows():
     generated_EPP_values.append(generated_EPP)
     real_EPP_values.append(real_EPP)
 
-# 计算最小和最大值
+# Calculate min and max values
 min_generated_EPP = np.min(generated_EPP_values)
 max_generated_EPP = np.max(generated_EPP_values)
 
-# 计算欧氏距离并百分比化
+# Calculate Euclidean distance and convert to percentage
 euclidean_distances_array = [(1 - euclidean_distances(np.reshape(generated_EPP, (1, -1)), np.reshape(real_EPP, (1, -1)))[0][0] /
                               (max_generated_EPP - min_generated_EPP)) * 100 for generated_EPP, real_EPP in
                              zip(generated_EPP_values, real_EPP_values)]
 
-# 计算平均欧氏距离百分比
+# Calculate average Euclidean distance percentage
 average_euclidean_distance_percentage = np.mean(euclidean_distances_array)
 
-# 将生成的EPP值添加到数据框中
+# Add generated EPP values to the dataframe
 data['Generated_EPP'] = generated_EPP_values
 
-# 归一化生成的EPP值
+# Normalize the generated EPP values
 min_generated_EPP = np.min(generated_EPP_values)
 max_generated_EPP = np.max(generated_EPP_values)
 
 data['Generated_EPP_Normalized'] = (generated_EPP_values - min_generated_EPP) / (max_generated_EPP - min_generated_EPP)
 
-# 打印生成值和真实值的对比数值及欧氏距离
+# Print comparison between generated and real values with Euclidean distance
 for i in range(len(data)):
     if euclidean_distances_array[i] >= 0:
         print(f"Real EPP: {real_EPP_values[i]:.6f}, Generated EPP (Normalized): {data['Generated_EPP_Normalized'].iloc[i]:.6f}, Euclidean Distance: {euclidean_distances_array[i]:.2f}")
 
-# 输出平均欧氏距离
+# Output average Euclidean distance
 print(f"\nAverage Euclidean Distance Percentage: {average_euclidean_distance_percentage:.2f}")
 
-# 计算指数函数相似度
+# Calculate exponential similarity
 exponential_similarity = np.exp(-average_euclidean_distance_percentage / 100) * 100
 
-# 输出指数函数相似度
+# Output exponential similarity
 print(f"\nExponential Similarity: {exponential_similarity:.2f}%")
 
-# 定义 MLP 模型类
+# Define MLP model class
 class MultiModalMLP(nn.Module):
     def __init__(self, input_size_visual, hidden_size=64):
         super(MultiModalMLP, self).__init__()
@@ -169,7 +169,7 @@ class MultiModalMLP(nn.Module):
         final_output = self.fc_final(out_visual)
         return final_output
 
-# 加载和预处理视觉特征
+# Load and preprocess visual features
 data_visual = pd.read_excel('animation-test111.xlsx', engine='openpyxl')
 X_visual = data_visual[['bpm', 'jitter', 'consonance', 'bigsmall', 'updown']].values
 y_visual = data_visual['EPP'].values.reshape(-1, 1)
@@ -177,7 +177,7 @@ y_visual = data_visual['EPP'].values.reshape(-1, 1)
 scaler_visual = MinMaxScaler()
 X_visual_scaled = scaler_visual.fit_transform(X_visual)
 
-# PyTorch 数据集
+# PyTorch Dataset definition
 class MultiModalDataset(Dataset):
     def __init__(self, X, y):
         self.X = torch.tensor(X, dtype=torch.float32)
@@ -189,7 +189,7 @@ class MultiModalDataset(Dataset):
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
 
-# 实例化模型并定义训练参数
+# Initialize model and define training parameters
 input_size_visual = X_visual.shape[1]
 model = MultiModalMLP(input_size_visual=input_size_visual, hidden_size=64)
 criterion = nn.MSELoss()
@@ -197,11 +197,11 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 epochs = 200
 batch_size = 32
 
-# 准备数据加载器
+# Prepare data loader
 dataset = MultiModalDataset(X_visual_scaled, y_visual)
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-# 训练循环并收集损失值
+# Training loop with loss collection
 losses = []
 for epoch in range(epochs):
     epoch_loss = 0.0
@@ -217,17 +217,17 @@ for epoch in range(epochs):
     losses.append(epoch_loss)
     print(f'Epoch [{epoch + 1}/{epochs}], Loss: {epoch_loss:.4f}')
 
-# 保存训练后的模型
+# Save trained model
 torch.save(model.state_dict(), 'multimodal_mlp_model.pth')
 
-# 将损失值保存到Excel文件
+# Save loss values to Excel file
 losses_df = pd.DataFrame({'Epoch': range(1, epochs + 1), 'Loss': losses})
 losses_df.to_excel('training_losses1.xlsx', index=False)
 
-# 绘制平滑的训练损失曲线
+# Plot smoothed training loss curve
 plt.figure(figsize=(10, 5))
 
-# 使用窗口大小为10的移动平均值平滑损失
+# Smooth losses using moving average with window size 10
 smoothed_losses = np.convolve(losses, np.ones(10)/10, mode='valid')
 
 plt.plot(range(1, len(smoothed_losses) + 1), smoothed_losses, label='Smoothed Training Loss')
@@ -238,25 +238,25 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-# 生成EPP值和计算指标
+# Generate EPP values and calculate metrics
 def generate_EPP(features):
     x, y = features[0], features[1]
     max_s = max(x, y)
 
-    # 计算Ai和Oi
+    # Calculate Ai and Oi
     Ai = np.zeros((depth,))
     Oi = np.zeros((depth,))
     for j in range(depth):
         Ai[j] = x * vi[0, j]
         Oi[j] = y * wi[0, j]
 
-    # 计算E
+    # Calculate E value
     E = (np.sum(Ai) + max_s) - np.sum(Oi)
     E -= np.sum(we * Ai)
 
     return E
 
-# 遍历数据行以生成新的EPP值并归一化
+# Iterate data rows to generate new EPP values and normalize
 generated_EPP_values = []
 real_EPP_values = []
 
@@ -269,12 +269,12 @@ for index, row in data_visual.iterrows():
     generated_EPP_values.append(generated_EPP)
     real_EPP_values.append(real_EPP)
 
-# 归一化生成的EPP值
+# Normalize generated EPP values
 min_generated_EPP = np.min(generated_EPP_values)
 max_generated_EPP = np.max(generated_EPP_values)
 generated_EPP_values_normalized = (generated_EPP_values - min_generated_EPP) / (max_generated_EPP - min_generated_EPP)
 
-# 打印比较和欧氏距离
+# Print comparison results and Euclidean distances
 for i in range(len(data_visual)):
     euclidean_distance = euclidean_distances(np.reshape(generated_EPP_values[i], (1, -1)), np.reshape(real_EPP_values[i], (1, -1)))[0][0]
     print(f"Real EPP: {real_EPP_values[i]:.6f}, Generated EPP (Normalized): {generated_EPP_values_normalized[i]:.6f}, Euclidean Distance: {euclidean_distance:.2f}")

@@ -77,85 +77,86 @@ features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(2).unsqu
 model = CORnet_Z()
 output = model(features_tensor)
 
-# 将输出结果应用于第二段代码的输入
+# Apply the output results to the input of the second code segment
 X = output.detach().numpy()
 
-# 第二段代码
-# 设置随机数生成器的种子
+# Second code segment
+# Set the seed for the random number generator
 np.random.seed(21)
 
-# 数据加载
+# Data loading
 data = pd.read_excel('animation-test111.xlsx', engine='openpyxl')
 
-# 提取输入特征和预测输出
+# Extract input features and target output
 y = data['EPP'].values.reshape(-1, 1)
 
-# 设置时间序列深度
+# Set time series depth
 depth = 2
 n = len(X) - depth
-data_input = np.zeros((n, depth, X.shape[1]))  # 修改 data_input 以包含特征
+data_input = np.zeros((n, depth, X.shape[1]))  # Modify data_input to include features
 target = np.zeros((n, 1))
 output = np.zeros((n, 1))
 
-# 构建时间序列数据
+# Construct time series data
 for i in range(len(X) - depth):
     for j in range(depth):
-        data_input[i, j] = X[i + j]  # 存储特征序列
+        data_input[i, j] = X[i + j]  # Store feature sequences
     target[i] = y[i + depth]
 
 data = data_input
 
-# 模拟丘脑和感觉皮层部分
-thalamus_output = np.random.uniform(0, 1, size=(n, 2))  # 模拟丘脑输出信号
-cortex_input = thalamus_output  # 感觉皮层接收丘脑输出信号并进行处理
+# Simulate thalamus and sensory cortex components
+thalamus_output = np.random.uniform(0, 1, size=(n, 2))  # Simulate thalamus output signals
+cortex_input = thalamus_output  # Sensory cortex receives thalamus output and processes it
 
-# 模拟杏仁核部分
-amygdala_input = np.concatenate((cortex_input, thalamus_output), axis=1)  # 杏仁核接收来自感觉皮层和丘脑的输入
+# Simulate amygdala component
+amygdala_input = np.concatenate((cortex_input, thalamus_output), axis=1)  # Amygdala receives input from sensory cortex and thalamus
 excitatory_system_output = np.zeros((n, 1))
 inhibitory_system_output = np.zeros((n, 1))
 
-# 模拟兴奋性学习系统
+# Simulate excitatory learning system
 for i in range(n):
-    excitatory_system_output[i] = np.sum(amygdala_input[i])  # 简单求和作为模拟
+    excitatory_system_output[i] = np.sum(amygdala_input[i])  # Simple summation as simulation
 
-# 模拟抑制性输出系统
+# Simulate inhibitory output system
 for i in range(n):
-    inhibitory_system_output[i] = np.sum(amygdala_input[i])  # 简单求和作为模拟
+    inhibitory_system_output[i] = np.sum(amygdala_input[i])  # Simple summation as simulation
 
-# 模拟眶额皮层部分
-orbitofrontal_input = np.concatenate((cortex_input, amygdala_input), axis=1)  # 眶额皮层接收来自其他皮层区域的输入
+# Simulate orbitofrontal cortex component
+orbitofrontal_input = np.concatenate((cortex_input, amygdala_input), axis=1)  # Orbitofrontal cortex receives input from other cortical regions
 orbitofrontal_output = np.zeros((n, 1))
 
-# 模拟眶额皮层的抑制性功能
+# Simulate inhibitory function of the orbitofrontal cortex
 for i in range(n):
-    orbitofrontal_output[i] = np.sum(orbitofrontal_input[i])  # 简单求和作为模拟
+    orbitofrontal_output[i] = np.sum(orbitofrontal_input[i])  # Simple summation as simulation
 
-# 循环神经网络参数
+# Recurrent neural network parameters
 hidden_size = 10
 eta = 0.00000001
 eta_m = 0.00000005
-eta_o = 0.05  # 眶额皮层学习率
-theta = 0.5  # 眶额皮层阈值
+eta_o = 0.05  # Orbitofrontal cortex learning rate
+theta = 0.5  # Orbitofrontal cortex threshold
 rew = 2
 
-# 初始化权重
+# Initialize weights
 vi = np.random.uniform(-1, 1, size=(1, 2))
 wi = np.random.uniform(-1, 1, size=(1, 2))
 Ai = np.zeros((n, 2))
 Oi = np.zeros((n, 2))
 we = np.random.uniform(-1, 1, size=(2, 2))
 
-# 训练参数
+# Training parameters
 epoch = 100
 number_train = round(0.75 * n)
 number_test = n - number_train
 
-# 记录每个周期的准确率
+# Record accuracy for each epoch
 accuracies = []
-# 训练
+
+# Training loop
 for iter in range(epoch):
     for i in range(number_train):
-        x, y = data[i][-1][-1], data[i][-1][-2]  # 修改这一行
+        x, y = data[i][-1][-1], data[i][-1][-2]  # Modified line
         z = target[i]
 
         max_s = max(x, y)
@@ -172,14 +173,14 @@ for iter in range(epoch):
         wi[0, 0] += error * eta_m * (x * (Oi[i, 0] + Oi[i, 1] - 2 * rew))
         wi[0, 1] += error * eta_m * (y * (Oi[i, 0] + Oi[i, 1] - 2 * rew))
 
-        # 更新眶额皮层
+        # Update orbitofrontal cortex
         we += eta_m * (Ai[i].reshape(-1, 1) - theta) * Oi[i].reshape(1, -1)
 
-    # 计算当前模型在测试集上的准确率
-    if iter == epoch - 1:  # 仅在最后一轮显示准确率
+    # Calculate model accuracy on the test set for current epoch
+    if iter == epoch - 1:  # Only display accuracy in the last epoch
         correct = 0
         for i in range(number_test):
-            x, y = data[number_train + i][-1][-2], data[number_train + i][-1][-1]  # 修改这一行
+            x, y = data[number_train + i][-1][-2], data[number_train + i][-1][-1]  # Modified line
             max_s = max(x, y)
             Ai[i, 0] = x * vi[0, 0]
             Ai[i, 1] = y * vi[0, 1]
@@ -192,16 +193,16 @@ for iter in range(epoch):
                 correct += 1
 
         accuracy = correct / number_test * 100
-        print(f'Epoch {iter + 1}, 测试准确率: {accuracy:.2f}%')
+        print(f'Epoch {iter + 1}, Test Accuracy: {accuracy:.2f}%')
 
-        # 提取目标变量的最小值和最大值
+        # Extract min and max values of the target variable
         target_min = np.min(target)
         target_max = np.max(target)
 
-        # 归一化预测值
+        # Normalize predicted values
         output_normalized = (output - target_min) / (target_max - target_min)
 
-        # 归一化预测值
+        # Normalize predicted values
         output_normalized = (output - np.min(output)) / (np.max(output) - np.min(output))
 
         # Plotting the comparison between predicted values and original EPP values
@@ -214,7 +215,7 @@ for iter in range(epoch):
         plt.grid(True)
         plt.show()
 
-        # 使用pickle保存模型参数
+        # Save model parameters using pickle
         model_parameters = {
             'vi': vi,
             'wi': wi,

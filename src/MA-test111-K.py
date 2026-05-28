@@ -5,6 +5,8 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import MinMaxScaler
 from brian2 import *
+import numpy as np
+import matplotlib.pyplot as plt
 
 # Cross-modal fusion layer definition
 class CrossModalFusionLayer(nn.Module):
@@ -114,14 +116,14 @@ torch.save(model.state_dict(), 'multimodal_mlp_model_with_fusion.pth')
 
 class Flatten(nn.Module):
     """
-    Helper module for flattening input tensor to 1-D for the use in Linear modules
+    Helper module for flattening input tensor to 1-D for linear layers
     """
     def forward(self, x):
         return x.view(x.size(0), -1)
 
 class Identity(nn.Module):
     """
-    Helper module that stores the current tensor. Useful for accessing by name
+    Helper module that preserves tensor value
     """
     def forward(self, x):
         return x
@@ -133,7 +135,7 @@ class CORblock_Z(nn.Module):
                               stride=stride, padding=kernel_size // 2)
         self.nonlin = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.output = Identity()  # for an easy access to this block's output
+        self.output = Identity()
 
     def forward(self, inp):
         x = self.conv(inp)
@@ -177,13 +179,13 @@ features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(2).unsqu
 model = CORnet_Z()
 output = model(features_tensor)
 
-# 将输出结果应用于第二段代码的输入
+# Apply output results to input of the second code section
 X = output.detach().numpy()
 
-# 设置随机数生成器的种子
+# Set random seed for reproducibility
 np.random.seed(21)
 def setup_and_run(data_input):
-    # 定义神经元模型
+    # Define neuron models
     eqs_e = '''
     dv/dt = (I - v) / (10*ms) : volt
     I : volt
@@ -197,150 +199,148 @@ def setup_and_run(data_input):
     I : volt
     '''
 
-    # 创建神经元组
+    # Create neuron groups
     G_PYR = NeuronGroup(400, eqs_e, threshold='v>0.5*volt', reset='v=0*volt')
     G_PV = NeuronGroup(200, eqs_p, threshold='v>0.5*volt', reset='v=0*volt')
     G_SOM = NeuronGroup(200, eqs_s, threshold='v>0.5*volt', reset='v=0*volt')
 
-    # 运行仿真
-    G_PYR.I = '0.6 * volt'  # 设置输入电流
+    # Run simulation
+    G_PYR.I = '0.6 * volt'  # Set input current
     G_PV.I = '0.6 * volt'
     G_SOM.I = '0.65 * volt'
 
-    # 设置监视器
+    # Set monitors
     M_PYR = SpikeMonitor(G_PYR)
     M_PV = SpikeMonitor(G_PV)
     M_SOM = SpikeMonitor(G_SOM)
 
-    run(1000*ms)  # 运行仿真一段时间
+    run(1000*ms)  # Run simulation for a period
 
     return M_PYR, M_PV, M_SOM
 
-# 读取数据
+# Read data
 data2 = pd.read_excel('music-test111.xlsx', engine='openpyxl')
 
-# 提取特征和目标变量
+# Extract features and target variable
 X = data2[['pitch_mean', 'tonnetz_mean', 'rms_mean', 'tempo_mean', 'duration_mean']]
 y = data2['EPP']
 
-# 特征归一化处理
+# Feature normalization
 X_normalized = (X - X.min()) / (X.max() - X.min())
 
-# 设置时间序列深度
+# Set time series depth
 depth = 2
 n = len(X_normalized) - depth
-data_input = np.zeros((n, depth, X_normalized.shape[1]))  # 修改 data_input 以包含特征
+data_input = np.zeros((n, depth, X_normalized.shape[1]))
 target = np.zeros((n, 1))
 output = np.zeros((n, 1))
 
-# 构建时间序列数据
+# Build time series data
 for i in range(n):
     for j in range(depth):
         data_input[i, j] = X_normalized.iloc[i + j].values
     target[i] = y.iloc[i + depth]
 
-# 提取听觉皮层模拟结果
+# Extract auditory cortex simulation results
 M_PYR, M_PV, M_SOM = setup_and_run(data_input)
 
-# 调试打印 SpikeMonitor 中的事件时间长度
-
-# 使用神经元脉冲数量作为输入特征
+# Use spike counts as input features
 auditory_features = np.array([len(M_PYR.t), len(M_PV.t), len(M_SOM.t)], dtype=float).reshape(1, -1)
 
-# 将 auditory_features 调整为循环神经网络的输入形状
+# Reshape auditory_features to fit RNN input shape
 rnn_input = np.tile(auditory_features, (n, 1))
 
-# 数据加载
+# Data loading
 data3 = pd.read_excel('music-test111.xlsx', engine='openpyxl')
 data4 = pd.read_excel('animation-test111.xlsx', engine='openpyxl')
 
-# 提取输入特征和预测输出
+# Extract input features and prediction outputs
 X1 = data3[['pitch_mean', 'tonnetz_mean', 'rms_mean', 'tempo_mean', 'duration_mean']]
 X2 = data4[['bpm', 'jitter', 'consonance', 'bigsmall', 'updown']]
 y1 = data3['EPP']
 y2 = data4['EPP']
 
-# 归一化处理
+# Normalization
 X1 = (X1 - np.min(X1)) / (np.max(X1) - np.min(X1))
 X2 = (X2 - np.min(X2)) / (np.max(X2) - np.min(X2))
 
-# 将数据转换为numpy数组
+# Convert data to numpy arrays
 X1 = X1.values
 X2 = X2.values
 y1 = y1.values.reshape(-1, 1)
 y2 = y2.values.reshape(-1, 1)
 
-# 将两份数据进行融合
+# Fuse two datasets
 X = np.concatenate((X1, X2), axis=1)
 y = np.mean(np.concatenate((y1, y2), axis=1), axis=1).reshape(-1, 1)
 
-# 设置时间序列深度
+# Set time series depth
 depth = 2
 n = len(X_combined) - depth
-data_input = np.zeros((n, depth, X_combined.shape[1]))  # 修改 data_input 以包含特征
+data_input = np.zeros((n, depth, X_combined.shape[1]))
 target = np.zeros((n, 1))
 
-# 构建时间序列数据
+# Build time series data
 for i in range(n):
     for j in range(depth):
-        # 将 combined 特征向量作为循环神经网络的输入特征
+        # Use combined feature vector as RNN input features
         data_input[i, j] = X_combined[i + j]
 
-    # 设置对应的目标变量（这里假设目标变量仍然是 y_combined 的下一个值）
+    # Set corresponding target variable
     target[i] = y_combined[i + depth]
 data = data_input
 
-# 模拟丘脑和感觉皮层部分
-thalamus_output = np.random.uniform(0, 1, size=(n, 2))  # 模拟丘脑输出信号
-cortex_input = thalamus_output  # 感觉皮层接收丘脑输出信号并进行处理
+# Simulate thalamus and sensory cortex
+thalamus_output = np.random.uniform(0, 1, size=(n, 2))
+cortex_input = thalamus_output
 
-# 模拟杏仁核部分
-amygdala_input = np.concatenate((cortex_input, thalamus_output), axis=1)  # 杏仁核接收来自感觉皮层和丘脑的输入
+# Simulate amygdala
+amygdala_input = np.concatenate((cortex_input, thalamus_output), axis=1)
 excitatory_system_output = np.zeros((n, 1))
 inhibitory_system_output = np.zeros((n, 1))
 
-# 模拟兴奋性学习系统
+# Simulate excitatory learning system
 for i in range(n):
-    excitatory_system_output[i] = np.sum(amygdala_input[i])  # 简单求和作为模拟
+    excitatory_system_output[i] = np.sum(amygdala_input[i])
 
-# 模拟抑制性输出系统
+# Simulate inhibitory output system
 for i in range(n):
-    inhibitory_system_output[i] = np.sum(amygdala_input[i])  # 简单求和作为模拟
+    inhibitory_system_output[i] = np.sum(amygdala_input[i])
 
-# 模拟眶额皮层部分
-orbitofrontal_input = np.concatenate((cortex_input, amygdala_input), axis=1)  # 眶额皮层接收来自其他皮层区域的输入
+# Simulate orbitofrontal cortex
+orbitofrontal_input = np.concatenate((cortex_input, amygdala_input), axis=1)
 orbitofrontal_output = np.zeros((n, 1))
 
-# 模拟眶额皮层的抑制性功能
+# Simulate inhibitory function of orbitofrontal cortex
 for i in range(n):
-    orbitofrontal_output[i] = np.sum(orbitofrontal_input[i])  # 简单求和作为模拟
+    orbitofrontal_output[i] = np.sum(orbitofrontal_input[i])
 
-# 循环神经网络参数
+# RNN parameters
 hidden_size = 10
 eta = 0.0004
 eta_m = 0.00045
-eta_o = 0.05  # 眶额皮层学习率
-theta = 0.5  # 眶额皮层阈值
+eta_o = 0.05  # Orbitofrontal cortex learning rate
+theta = 0.5  # Orbitofrontal cortex threshold
 rew = 2
 
-# 初始化权重
+# Initialize weights
 vi = np.random.uniform(-1, 1, size=(1, 2))
 wi = np.random.uniform(-1, 1, size=(1, 2))
 Ai = np.zeros((n, 2))
 Oi = np.zeros((n, 2))
 we = np.random.uniform(-1, 1, size=(2, 2))
 
-# 训练参数
+# Training parameters
 epoch = 100
 number_train = round(0.75 * n)
 number_test = n - number_train
 
-# 记录每个周期的准确率
+# Record accuracy for each epoch
 accuracies = []
-# 训练
+# Training loop
 for iter in range(epoch):
     for i in range(number_train):
-        x, y = data[i][-1][-1], data[i][-1][-2]  # 修改这一行
+        x, y = data[i][-1][-1], data[i][-1][-2]
         z = target[i]
 
         max_s = max(x, y)
@@ -357,14 +357,14 @@ for iter in range(epoch):
         wi[0, 0] += error * eta_m * (x * (Oi[i, 0] + Oi[i, 1] - 2 * rew))
         wi[0, 1] += error * eta_m * (y * (Oi[i, 0] + Oi[i, 1] - 2 * rew))
 
-        # 更新眶额皮层
+        # Update orbitofrontal cortex
         we += eta_m * (Ai[i].reshape(-1, 1) - theta) * Oi[i].reshape(1, -1)
 
-    # 计算当前模型在测试集上的准确率
-    if iter == epoch - 1:  # 仅在最后一轮显示准确率
+    # Calculate test accuracy in the last epoch
+    if iter == epoch - 1:
         correct = 0
         for i in range(number_test):
-            x, y = data[number_train + i][-1][-2], data[number_train + i][-1][-1]  # 修改这一行
+            x, y = data[number_train + i][-1][-2], data[number_train + i][-1][-1]
             max_s = max(x, y)
             Ai[i, 0] = x * vi[0, 0]
             Ai[i, 1] = y * vi[0, 1]
@@ -377,27 +377,16 @@ for iter in range(epoch):
                 correct += 1
 
         accuracy = correct / number_test * 100
-        print(f'Epoch {iter + 1}, 测试准确率: {accuracy:.2f}%')
+        print(f'Epoch {iter + 1}, Test Accuracy: {accuracy:.2f}%')
 
-        # 提取目标变量的最小值和最大值
+        # Extract min and max of target values
         target_min = np.min(target)
         target_max = np.max(target)
 
-        # 归一化预测值
+        # Normalize predictions
         output_normalized = (output - target_min) / (target_max - target_min)
 
-        '''
-        # Plotting the comparison between predicted values and original EPP values
-        plt.plot(range(number_test), output_normalized[number_train:], label='Predicted')
-        plt.plot(range(number_test), target[number_train:], label='Original EPP')
-        plt.title('Comparison between Predicted and Original EPP Values')
-        plt.xlabel('Data Index')
-        plt.ylabel('EPP')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
-        '''
-        # 使用pickle保存模型参数
+        # Save model parameters using pickle
         model_parameters = {
             'vi': vi,
             'wi': wi,
@@ -412,4 +401,3 @@ for iter in range(epoch):
 
         with open('trained_model-ma_parameters.pkl', 'wb') as file:
             pickle.dump(model_parameters, file)
-

@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-# Define the MLP model class
+
 # Cross-modal fusion layer definition
 class CrossModalFusionLayer(nn.Module):
     def __init__(self, input_size_audio, input_size_visual, hidden_size=64):
@@ -118,14 +118,14 @@ torch.save(model.state_dict(), 'multimodal_mlp_model_with_fusion.pth')
 
 class Flatten(nn.Module):
     """
-    Helper module for flattening input tensor to 1-D for the use in Linear modules
+    Helper module for flattening input tensor to 1-D for linear layers
     """
     def forward(self, x):
         return x.view(x.size(0), -1)
 
 class Identity(nn.Module):
     """
-    Helper module that stores the current tensor. Useful for accessing by name
+    Helper module that preserves tensor value without modification
     """
     def forward(self, x):
         return x
@@ -137,7 +137,7 @@ class CORblock_Z(nn.Module):
                               stride=stride, padding=kernel_size // 2)
         self.nonlin = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.output = Identity()  # for an easy access to this block's output
+        self.output = Identity()
 
     def forward(self, inp):
         x = self.conv(inp)
@@ -181,13 +181,13 @@ features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(2).unsqu
 model = CORnet_Z()
 output = model(features_tensor)
 
-# 将输出结果应用于第二段代码的输入
+# Apply output results to the input of the second code section
 X = output.detach().numpy()
 
-# 设置随机数生成器的种子
+# Set random seed for reproducibility
 np.random.seed(21)
 def setup_and_run(data_input):
-    # 定义神经元模型
+    # Define neuron models
     eqs_e = '''
     dv/dt = (I - v) / (10*ms) : volt
     I : volt
@@ -201,90 +201,88 @@ def setup_and_run(data_input):
     I : volt
     '''
 
-    # 创建神经元组
+    # Create neuron groups
     G_PYR = NeuronGroup(400, eqs_e, threshold='v>0.5*volt', reset='v=0*volt')
     G_PV = NeuronGroup(200, eqs_p, threshold='v>0.5*volt', reset='v=0*volt')
     G_SOM = NeuronGroup(200, eqs_s, threshold='v>0.5*volt', reset='v=0*volt')
 
-    # 运行仿真
-    G_PYR.I = '0.6 * volt'  # 设置输入电流
+    # Run simulation
+    G_PYR.I = '0.6 * volt'  # Set input current
     G_PV.I = '0.6 * volt'
     G_SOM.I = '0.65 * volt'
 
-    # 设置监视器
+    # Set spike monitors
     M_PYR = SpikeMonitor(G_PYR)
     M_PV = SpikeMonitor(G_PV)
     M_SOM = SpikeMonitor(G_SOM)
 
-    run(1000*ms)  # 运行仿真一段时间
+    run(1000*ms)  # Run simulation for a period
 
     return M_PYR, M_PV, M_SOM
 
-# 读取数据
+# Read data
 data2 = pd.read_excel('music-test111.xlsx', engine='openpyxl')
 
-# 提取特征和目标变量
+# Extract features and target variable
 X = data2[['pitch_mean', 'tonnetz_mean', 'rms_mean', 'tempo_mean', 'duration_mean']]
 y = data2['EPP']
 
-# 特征归一化处理
+# Feature normalization
 X_normalized = (X - X.min()) / (X.max() - X.min())
 
-# 设置时间序列深度
+# Set time series depth
 depth = 2
 n = len(X_normalized) - depth
-data_input = np.zeros((n, depth, X_normalized.shape[1]))  # 修改 data_input 以包含特征
+data_input = np.zeros((n, depth, X_normalized.shape[1]))
 target = np.zeros((n, 1))
 output = np.zeros((n, 1))
 
-# 构建时间序列数据
+# Build time series data
 for i in range(n):
     for j in range(depth):
         data_input[i, j] = X_normalized.iloc[i + j].values
     target[i] = y.iloc[i + depth]
 
-# 提取听觉皮层模拟结果
+# Extract auditory cortex simulation results
 M_PYR, M_PV, M_SOM = setup_and_run(data_input)
 
-# 调试打印 SpikeMonitor 中的事件时间长度
-
-# 使用神经元脉冲数量作为输入特征
+# Use neuron spike counts as input features
 auditory_features = np.array([len(M_PYR.t), len(M_PV.t), len(M_SOM.t)], dtype=float).reshape(1, -1)
 
-# 将 auditory_features 调整为循环神经网络的输入形状
+# Reshape auditory_features to fit RNN input shape
 rnn_input = np.tile(auditory_features, (n, 1))
 
-# 数据加载
+# Data loading
 data3 = pd.read_excel('music-test111.xlsx', engine='openpyxl')
 data4 = pd.read_excel('animation-test111.xlsx', engine='openpyxl')
 
-# 提取输入特征和预测输出
+# Extract input features and prediction outputs
 X1 = data3[['pitch_mean', 'tonnetz_mean', 'rms_mean', 'tempo_mean', 'duration_mean']]
 X2 = data4[['bpm', 'jitter', 'consonance', 'bigsmall', 'updown']]
 y1 = data3['EPP']
 y2 = data4['EPP']
 
-# 归一化处理
+# Normalization
 X1 = (X1 - np.min(X1)) / (np.max(X1) - np.min(X1))
 X2 = (X2 - np.min(X2)) / (np.max(X2) - np.min(X2))
 
-# 将数据转换为numpy数组
+# Convert data to numpy arrays
 X1 = X1.values
 X2 = X2.values
 y1 = y1.values.reshape(-1, 1)
 y2 = y2.values.reshape(-1, 1)
 
-# 将两份数据进行融合
+# Fuse two datasets
 X = np.concatenate((X1, X2), axis=1)
 y = np.mean(np.concatenate((y1, y2), axis=1), axis=1).reshape(-1, 1)
 
-# 数据准备部分
+# Data preparation
 depth = 2
 n = len(X_combined) - depth
-data_input = np.zeros((n, depth, X_combined.shape[1]))  # 修改 data_input 以包含特征
+data_input = np.zeros((n, depth, X_combined.shape[1]))
 target = np.zeros((n, 1))
 
-# 构建时间序列数据
+# Build time series data
 for i in range(n):
     for j in range(depth):
         data_input[i, j] = X_combined[i + j]
@@ -293,7 +291,7 @@ data_input = torch.tensor(data_input, dtype=torch.float32)
 target = torch.tensor(target, dtype=torch.float32)
 
 
-# Transformer 模型
+# Transformer model
 class TransformerModel(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers=1, dropout=0.1):
         super(TransformerModel, self).__init__()
@@ -302,78 +300,79 @@ class TransformerModel(nn.Module):
         self.num_layers = num_layers
         self.input_size = input_size
 
-        # Encoder 部分
+        # Transformer Encoder
         self.encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(d_model=hidden_size, nhead=2, dropout=dropout),
             num_layers=num_layers
         )
 
-        # Decoder 部分 (一个简单的线性层)
+        # Simple linear decoder
         self.decoder = nn.Linear(hidden_size, 1)
 
-        # 输入到 Transformer 的嵌入层
+        # Input embedding layer for Transformer
         self.embedding = nn.Linear(input_size, hidden_size)
 
     def forward(self, x):
-        # 输入的形状为 (batch_size, sequence_length, input_size)
+        # Input shape: (batch_size, sequence_length, input_size)
         x = self.embedding(x)  # Shape: (n, depth, hidden_size)
 
-        # 转置为 (sequence_length, batch_size, hidden_size)
+        # Transpose to (sequence_length, batch_size, hidden_size)
         x = x.permute(1, 0, 2)
 
-        # Transformer Encoder 处理
+        # Transformer Encoder processing
         x = self.encoder(x)
 
-        # 解码（预测值）
-        x = x[-1, :, :]  # 获取最后一个时间步的输出
+        # Decode (predict value)
+        x = x[-1, :, :]  # Get output of last time step
         x = self.decoder(x)
 
         return x
 
 
-# 超参数
+# Hyperparameters
 hidden_size = 10
 eta = 0.00004
 eta_m = 0.000045
-eta_o = 0.05  # 眶额皮层学习率
-theta = 0.5  # 眶额皮层阈值
+eta_o = 0.05  # Orbitofrontal cortex learning rate
+theta = 0.5  # Orbitofrontal cortex threshold
 rew = 2
 epoch = 100
 number_train = round(0.75 * n)
 number_test = n - number_train
-# 初始化权重
+
+# Initialize weights
 vi = np.random.uniform(-1, 1, size=(1, 2))
 wi = np.random.uniform(-1, 1, size=(1, 2))
 Ai = np.zeros((n, 2))
 Oi = np.zeros((n, 2))
 we = np.random.uniform(-1, 1, size=(2, 2))
 
-# 创建 Transformer 模型
+# Create Transformer model
 model = TransformerModel(input_size=X_combined.shape[1], hidden_size=hidden_size)
 optimizer = optim.Adam(model.parameters(), lr=eta)
 criterion = nn.MSELoss()
 
-# 记录训练和测试过程中的准确率
+# Record accuracy during training and testing
 accuracies = []
 
-# 训练过程
+# Training process
 for iter in range(epoch):
     model.train()
     for i in range(number_train):
-        # 获取数据
+        # Get data
         x = data_input[i]
         y = target[i]
 
-        # 前向传播
+        # Forward pass
         optimizer.zero_grad()
-        output = model(x.unsqueeze(0))  # 添加 batch 维度
+        output = model(x.unsqueeze(0))  # Add batch dimension
         loss = criterion(output, y)
 
-        # 反向传播
+        # Backward pass
         loss.backward()
         optimizer.step()
 
-    # 测试准确率
+    # Test accuracy in the last epoch
     if iter == epoch - 1:
         correct = 0
         model.eval()
@@ -381,22 +380,22 @@ for iter in range(epoch):
             for i in range(number_test):
                 x = data_input[number_train + i]
                 y = target[number_train + i]
-                output = model(x.unsqueeze(0))  # 添加 batch 维度
+                output = model(x.unsqueeze(0))  # Add batch dimension
 
                 if np.sign(output.item()) == np.sign(y.item()):
                     correct += 1
 
         accuracy = correct / number_test * 100
-        print(f'Epoch {iter + 1}, 测试准确率: {accuracy:.2f}%')
+        print(f'Epoch {iter + 1}, Test Accuracy: {accuracy:.2f}%')
 
-        # 提取目标变量的最小值和最大值
-        target_min = torch.min(target).item()  # 获取最小值
-        target_max = torch.max(target).item()  # 获取最大值
+        # Get min and max of target values
+        target_min = torch.min(target).item()
+        target_max = torch.max(target).item()
 
-        # 归一化预测值
+        # Normalize predictions
         output_normalized = (output - target_min) / (target_max - target_min)
 
-        # 使用pickle保存模型参数
+        # Save model parameters using pickle
         model_parameters = {
             'vi': vi,
             'wi': wi,
@@ -411,4 +410,3 @@ for iter in range(epoch):
 
         with open('trained_model-mat_parameters.pkl', 'wb') as file:
             pickle.dump(model_parameters, file)
-

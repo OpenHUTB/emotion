@@ -30,7 +30,7 @@ y_visual = data_visual['EPP'].values.reshape(-1, 1)
 scaler_visual = MinMaxScaler()
 X_visual_scaled = scaler_visual.fit_transform(X_visual)
 
-# PyTorch Dataset
+# PyTorch Dataset definition
 class MultiModalDataset(Dataset):
     def __init__(self, X, y):
         self.X = torch.tensor(X, dtype=torch.float32)
@@ -42,7 +42,7 @@ class MultiModalDataset(Dataset):
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
 
-# Instantiate the model and define training parameters
+# Initialize model and define training parameters
 input_size_visual = X_visual.shape[1]
 model = MultiModalMLP(input_size_visual=input_size_visual, hidden_size=64)
 criterion = nn.MSELoss()
@@ -83,13 +83,17 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-# Load model parameters from file (adjust based on your specific parameters)
+# Load model parameters from file
 with open('trained_model-animation_parameters.pkl', 'rb') as file:
     model_parameters = pickle.load(file)
 
-# Assuming you have setup and_run function for neuronal simulation
+# Extract model parameters
+vi = model_parameters['vi']
+wi = model_parameters['wi']
+we = model_parameters['we']
+depth = model_parameters['depth']
 
-# Generate EPP values and calculate metrics (adjust generate_EPP function based on your needs)
+# Generate EPP values and calculate metrics
 def generate_EPP(features):
     x, y = features[0], features[1]
     max_s = max(x, y)
@@ -123,7 +127,7 @@ min_generated_EPP = np.min(generated_EPP_values)
 max_generated_EPP = np.max(generated_EPP_values)
 generated_EPP_values_normalized = (generated_EPP_values - min_generated_EPP) / (max_generated_EPP - min_generated_EPP)
 
-# Print comparison and Euclidean distances
+# Print comparison results and Euclidean distances
 for i in range(len(data_visual)):
     euclidean_distance = euclidean_distances(np.reshape(generated_EPP_values[i], (1, -1)), np.reshape(real_EPP_values[i], (1, -1)))[0][0]
     print(f"Real EPP: {real_EPP_values[i]:.6f}, Generated EPP (Normalized): {generated_EPP_values_normalized[i]:.6f}, Euclidean Distance: {euclidean_distance:.2f}")
@@ -139,8 +143,8 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-# Additional plot for neuronal simulation or other visualizations
-M_PYR, M_PV, M_SOM = setup_and_run(data_visual)  # Assuming setup_and_run returns SpikeMonitors
+# Additional plot for neuronal simulation
+M_PYR, M_PV, M_SOM = setup_and_run(data_visual)
 
 plt.figure(figsize=(10, 5))
 plt.plot(M_PYR.t/ms, M_PYR.i, 'r.', label='Excitatory Neurons')

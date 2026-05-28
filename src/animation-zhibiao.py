@@ -6,6 +6,7 @@ from sklearn.metrics.pairwise import euclidean_distances
 from torch import nn
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.metrics import precision_recall_fscore_support
+
 class Flatten(nn.Module):
     """
     Helper module for flattening input tensor to 1-D for the use in Linear modules
@@ -61,12 +62,14 @@ def CORnet_Z():
             m.bias.data.zero_()
 
     return model
+
 threshold = 0.25  # Adjust threshold as per your requirement
-# 加载模型参数
+
+# Load model parameters
 with open('trained_model-animation_parameters.pkl', 'rb') as file:
     model_parameters = pickle.load(file)
 
-# 提取模型参数
+# Extract model parameters
 vi = model_parameters['vi']
 wi = model_parameters['wi']
 we = model_parameters['we']
@@ -77,38 +80,38 @@ eta = model_parameters['eta']
 eta_m = model_parameters['eta_m']
 rew = model_parameters['rew']
 
-# 从文件加载数据
+# Load data from Excel file
 data = pd.read_excel('animation-test111.xlsx', engine='openpyxl')
 
-# 生成程序
+# EPP generation function
 def generate_EPP(features):
     x, y = features[0], features[1]
     max_s = max(x, y)
 
-    # 计算Ai和Oi
+    # Calculate Ai and Oi values
     Ai = np.zeros((depth,))
     Oi = np.zeros((depth,))
     for j in range(depth):
         Ai[j] = x * vi[0, j]
         Oi[j] = y * wi[0, j]
 
-    # 计算E
+    # Calculate E value
     E = (np.sum(Ai) + max_s) - np.sum(Oi)
 
-    # 应用眶额皮层的抑制影响
+    # Apply inhibitory influence from orbitofrontal cortex
     E -= np.sum(we * Ai)
 
     return E
 
-# 遍历所有数据行，生成新的EPP值并归一化
+# Iterate all data rows, generate new EPP values and prepare for normalization
 generated_EPP_values = []
 real_EPP_values = []
 
-# 初始化最小和最大值
+# Initialize minimum and maximum values
 min_generated_EPP = np.inf
 max_generated_EPP = -np.inf
 
-# 计算欧氏距离
+# Calculate Euclidean distances
 euclidean_distances_array = []
 
 for index, row in data.iterrows():
@@ -120,47 +123,44 @@ for index, row in data.iterrows():
     generated_EPP_values.append(generated_EPP)
     real_EPP_values.append(real_EPP)
 
-# 计算最小和最大值
+# Calculate min and max of generated EPP values
 min_generated_EPP = np.min(generated_EPP_values)
 max_generated_EPP = np.max(generated_EPP_values)
 
-# 计算欧氏距离并百分比化
+# Calculate Euclidean distance and convert to percentage
 euclidean_distances_array = [(1 - euclidean_distances(np.reshape(generated_EPP, (1, -1)), np.reshape(real_EPP, (1, -1)))[0][0] /
                               (max_generated_EPP - min_generated_EPP)) * 100 for generated_EPP, real_EPP in
                              zip(generated_EPP_values, real_EPP_values)]
 
-# 计算平均欧氏距离百分比
+# Calculate average Euclidean distance percentage
 average_euclidean_distance_percentage = np.mean(euclidean_distances_array)
 
-# 将生成的EPP值添加到数据框中
+# Add generated EPP values to dataframe
 data['Generated_EPP'] = generated_EPP_values
 
-# 归一化生成的EPP值
+# Normalize the generated EPP values to [0, 1]
 min_generated_EPP = np.min(generated_EPP_values)
 max_generated_EPP = np.max(generated_EPP_values)
-
 data['Generated_EPP_Normalized'] = (generated_EPP_values - min_generated_EPP) / (max_generated_EPP - min_generated_EPP)
-# 打印生成值和真实值的对比数值及欧氏距离
+
+# Print comparison between real and generated EPP values with Euclidean distance
 for i in range(len(data)):
     if euclidean_distances_array[i] >= 0:
         print(f"Real EPP: {real_EPP_values[i]:.6f}, Generated EPP (Normalized): {data['Generated_EPP_Normalized'].iloc[i]:.6f}, Euclidean Distance: {euclidean_distances_array[i]:.2f}")
 
-# 输出平均欧氏距离
+# Print average Euclidean distance
 print(f"\nAverage Euclidean Distance Percentage: {average_euclidean_distance_percentage:.2f}")
-# 计算相似度
-#similarity = (1 - average_euclidean_distance_percentage / 100)*100
 
-# 输出相似度
-#print(f"\nAverage Similarity: {similarity:.2f}%")
-# 计算指数函数相似度
+# Calculate exponential similarity
 exponential_similarity = np.exp(-average_euclidean_distance_percentage / 100) * 100
 
-# 输出指数函数相似度
+# Print exponential similarity
 print(f"\nExponential Similarity: {exponential_similarity:.2f}%")
+
 # Convert EPP values to binary labels if needed (for illustration purposes)
 # Example: Convert to binary labels based on a threshold
+threshold = 0.2  # Adjust threshold as per your requirement
 
-threshoId = 0.2  # Adjust threshold as per your requirement
 # Example: Assuming binary classification based on threshold
 generated_labels = np.where(data['Generated_EPP_Normalized'] > threshold, 1, 0)
 real_labels = np.where(data['EPP'] > threshold, 1, 0)
@@ -171,7 +171,8 @@ precision, recall, f1_score, _ = precision_recall_fscore_support(real_labels, ge
 print(f"Precision: {precision:.2f}")
 print(f"Recall: {recall:.2f}")
 print(f"F1-score: {f1_score:.2f}")
-# 绘制折线图对比
+
+# Plot line chart for comparison
 plt.plot(data.index, real_EPP_values, marker='o', linestyle='-', color='b', label='Real EPP')
 plt.plot(data.index, data['Generated_EPP_Normalized'], marker='o', linestyle='-', color='r',
          label='Generated EPP (Normalized)')

@@ -90,6 +90,7 @@ for epoch in range(epochs):
 
 # Save trained model
 torch.save(model.state_dict(), 'multimodal_mlp_model.pth')
+
 class Flatten(nn.Module):
     """
     Helper module for flattening input tensor to 1-D for the use in Linear modules
@@ -111,7 +112,7 @@ class CORblock_Z(nn.Module):
                               stride=stride, padding=kernel_size // 2)
         self.nonlin = nn.GeLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.output = Identity()  # for an easy access to this block's output
+        self.output = Identity()
 
     def forward(self, inp):
         x = self.conv(inp)
@@ -146,11 +147,11 @@ def CORnet_Z():
 
     return model
 
-# 加载模型参数
+# Load model parameters
 with open('trained_model-ma_parameters.pkl', 'rb') as file:
     model_parameters = pickle.load(file)
 
-# 提取模型参数
+# Extract model parameters
 vi = model_parameters['vi']
 wi = model_parameters['wi']
 we = model_parameters['we']
@@ -161,12 +162,10 @@ eta = model_parameters['eta']
 eta_m = model_parameters['eta_m']
 rew = model_parameters['rew']
 
-# 从文件加载数据
+# Load data from files
 data_music = pd.read_excel('music-test111.xlsx', engine='openpyxl')
 data_animation = pd.read_excel('animation-test111.xlsx', engine='openpyxl')
 
-# 计算加权平均EPP参考值
-# weighted_avg_reference_EPP = (0.3 * data_music['EPP'].mean() + 0.7 * data_animation['EPP'].mean())
 # Plot smoothed training loss curve
 plt.figure(figsize=(10, 5))
 
@@ -181,8 +180,6 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-# Example of remaining code for calculating and visualizing other metrics (e.g., similarity)
-
 # Function to generate EPP value
 def generate_EPP(features_music, features_animation):
     x_music, y_music = features_music[0], features_music[1]
@@ -191,81 +188,79 @@ def generate_EPP(features_music, features_animation):
     max_s_music = max(x_music, y_music)
     max_s_animation = max(x_animation, y_animation)
 
-    # 计算 Ai 和 Oi
+    # Calculate Ai and Oi for music
     Ai_music = np.zeros((depth,))
     Oi_music = np.zeros((depth,))
     for j in range(depth):
         Ai_music[j] = x_music * vi[0, j]
         Oi_music[j] = y_music * wi[0, j]
 
+    # Calculate Ai and Oi for animation
     Ai_animation = np.zeros((depth,))
     Oi_animation = np.zeros((depth,))
     for j in range(depth):
         Ai_animation[j] = x_animation * vi[0, j]
         Oi_animation[j] = y_animation * wi[0, j]
 
-    # 计算 E
+    # Calculate E values
     E_music = (np.sum(Ai_music) + max_s_music) - np.sum(Oi_music)
     E_animation = (np.sum(Ai_animation) + max_s_animation) - np.sum(Oi_animation)
 
-    # 应用眶额皮层的抑制影响
+    # Apply inhibitory influence from orbitofrontal cortex
     E_music -= np.sum(we * Ai_music)
     E_animation -= np.sum(we * Ai_animation)
 
-    # 综合两份文件的特征值生成新的 EPP 值
+    # Generate fused EPP value from both modalities
     generated_EPP = np.mean([E_music, E_animation])
 
     return generated_EPP
 
-# 遍历所有数据行，生成新的 EPP 值并归一化
+# Iterate all data rows, generate new EPP values and prepare for normalization
 generated_EPP_values = []
 weighted_avg_reference_EPP_list = []
-# 初始化最小和最大值
+
+# Initialize minimum and maximum values
 min_generated_EPP = np.inf
 max_generated_EPP = -np.inf
 
-# 计算欧氏距离
+# Calculate Euclidean distances
 euclidean_distances_array = []
 
 for index, (row_music, row_animation) in enumerate(zip_longest(data_music.iterrows(), data_animation.iterrows(), fillvalue=(None, None))):
     features_music = row_music[1][['pitch_mean', 'tonnetz_mean', 'rms_mean', 'tempo_mean', 'duration_mean']].values
     features_animation = row_animation[1][['bpm', 'jitter', 'consonance', 'bigsmall', 'updown']].values
 
-    # 跳过缺失的行
+    # Skip samples with missing data
     if row_music[1] is None or row_animation[1] is None:
         print(f"Skipping sample {index + 1} due to missing data.")
         continue
 
     generated_EPP = generate_EPP(features_music, features_animation)
-
     generated_EPP_values.append(generated_EPP)
 
-    # 计算加权平均EPP参考值
+    # Calculate weighted average EPP reference value
     weighted_avg_reference_EPP = (0.25 * row_music[1]['EPP'] + 0.75 * row_animation[1]['EPP'])
     weighted_avg_reference_EPP_list.append(weighted_avg_reference_EPP)
 
-# 计算最小和最大值
+# Calculate min and max of generated EPP values
 min_generated_EPP = np.min(generated_EPP_values)
 max_generated_EPP = np.max(generated_EPP_values)
 
-# 在计算欧氏距离之前，将数组转换为列表
+# Re-calculate weighted reference list properly
 weighted_avg_reference_EPP_list = [0.25 * row_music[1]['EPP'] + 0.75 * row_animation[1]['EPP'] for row_music, row_animation in zip(data_music.iterrows(), data_animation.iterrows())]
 
-
-
-# 修改这行代码
+# Calculate Euclidean distance and convert to percentage
 euclidean_distances_array = [(1 - euclidean_distances(np.array(generated_EPP).reshape(1, -1), np.array(real_EPP).reshape(1, -1))[0][0] /
                               (max_generated_EPP - min_generated_EPP)) * 100 for generated_EPP, real_EPP in
                              zip_longest(generated_EPP_values, weighted_avg_reference_EPP_list, fillvalue=(None, None))]
 
-# 计算平均欧氏距离百分比
+# Calculate average Euclidean distance percentage
 average_euclidean_distance_percentage = np.mean(euclidean_distances_array)
 
-# 将生成的 EPP 值添加到数据框中
+# Add generated EPP values to dataframe
 data_music['Generated_EPP'] = generated_EPP_values
 
-# 归一化生成的 EPP 值
+# Normalize the generated EPP values to [0, 1]
 min_generated_EPP = np.min(generated_EPP_values)
 max_generated_EPP = np.max(generated_EPP_values)
-
 data_music['Generated_EPP_Normalized'] = (generated_EPP_values - min_generated_EPP) / (max_generated_EPP - min_generated_EPP)
